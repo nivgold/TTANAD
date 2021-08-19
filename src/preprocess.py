@@ -174,7 +174,7 @@ def preprocessing(dataset_name, args):
 
     # saving preprocessed dataset to disk
     print(f'--- Saving Preprocessed files to disk ---')
-    save_to_disk(train_features, train_labels, test_features, test_labels, tta_features, tta_labels)
+    save_to_disk(train_features, train_labels, test_features, test_labels, tta_features, tta_labels, dataset_name)
 
 def convert_target_to_int(df, label_col, normal_class):
     """
@@ -281,8 +281,6 @@ def create_TTA(test_df, label_col, window_size):
     tta_labels = []
     tta_features = []
 
-    print(f"test_norm_df indexes: {test_norm_df.index}")
-
     # making the TTA data
     for index in tqdm(test_norm_df.index):
         index = int(index)
@@ -298,7 +296,7 @@ def create_TTA(test_df, label_col, window_size):
     
     return tta_features, tta_labels
 
-def save_to_disk(train_features, train_labels, test_features, test_labels, tta_features, tta_labels):
+def save_to_disk(train_features, train_labels, test_features, test_labels, tta_features, tta_labels, dataset_name):
     """
     Saving the preprocessed data to the disk
 
@@ -310,36 +308,29 @@ def save_to_disk(train_features, train_labels, test_features, test_labels, tta_f
     test_labels: pandas' Series. The labels of the test set
     tta_features:  pandas' DataFrame. The features of the tta data
     tta_labels: pandas' Series. The labels of the tta data
+    dataset_name: str. The name of the current preprocessed datasetet
     """
 
     disk_path = "../data/" + dataset_name + "/"
 
     # # save preprocessed training set
-    # train_features.to_pickle(disk_path + f'{dataset_name}_train_features.pkl')
-    # train_labels.to_pickle(disk_path + f'{dataset_name}_train_labels.pkl')
+    # print('--- Saving preprocessed training set ---')
+    # np.save(disk_path + f'{dataset_name}_train_features.npy', train_features.values)
+    # np.save(disk_path + f'{dataset_name}_train_labels.npy', train_labels.values)
 
     # # save preprocessed test set
-    # test_features.to_pickle(disk_path + f'{dataset_name}_test_features.pkl')
-    # test_labels.to_pickle(disk_path + f'{dataset_name}_test_labels.pkl')
-
-    # # save TTAs
-    # tta_features.to_pickle(disk_path + f'{dataset_name}_tta_features.pkl')
-    # tta_labels.to_pickle(disk_path + f'{dataset_name}_tta_labels.pkl')
-
-    # save preprocessed training set
-    print('--- Saving preprocessed training set ---')
-    np.save(disk_path + f'{dataset_name}_train_features.npy', train_features.values)
-    np.save(disk_path + f'{dataset_name}_train_labels.npy', train_labels.values)
-
-    # save preprocessed test set
-    print("--- Saving preprocessed test set ---")
-    np.save(disk_path + f'{dataset_name}_test_features.npy', test_features.values)
-    np.save(disk_path + f'{dataset_name}_test_labels.npy', test_labels.values)
+    # print("--- Saving preprocessed test set ---")
+    # np.save(disk_path + f'{dataset_name}_test_features.npy', test_features.values)
+    # np.save(disk_path + f'{dataset_name}_test_labels.npy', test_labels.values)
     
-    # save TTAs
-    print('--- Saving TTAs ---')
-    np.save(disk_path + f'{dataset_name}_tta_features.npy', tta_features)
-    np.save(disk_path + f'{dataset_name}_tta_labels.npy', tta_labels)
+    # # save TTAs
+    # print('--- Saving TTAs ---')
+    # np.save(disk_path + f'{dataset_name}_tta_features.npy', tta_features)
+    # np.save(disk_path + f'{dataset_name}_tta_labels.npy', tta_labels)
+
+    # saving in a compressed zip file
+    np.savez_compressed(disk_path + f"{dataset_name}_preprocessed", train_features=train_features.values, train_labels=train_labels.values, test_features=test_features.values, test_labels=test_labels.values, tta_features=tta_features, tta_labels=tta_labels)
+
 
 if __name__ == '__main__':
 

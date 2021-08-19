@@ -28,17 +28,28 @@ def load_preprocessed(dataset_name):
     
     disk_path = '../data/' + dataset_name + "/"
 
-    # loading training set features and labels
-    train_features = np.load(disk_path + f"{dataset_name}_train_features.npy")
-    train_labels = np.load(disk_path + f"{dataset_name}_train_labels.npy")
+    # # loading training set features and labels
+    # train_features = np.load(disk_path + f"{dataset_name}_train_features.npy")
+    # train_labels = np.load(disk_path + f"{dataset_name}_train_labels.npy")
 
-    # loading test set features and labels
-    test_features = np.load(disk_path + f"{dataset_name}_test_features.npy")
-    test_labels = np.load(disk_path + f"{dataset_name}_test_labels.npy")
+    # # loading test set features and labels
+    # test_features = np.load(disk_path + f"{dataset_name}_test_features.npy")
+    # test_labels = np.load(disk_path + f"{dataset_name}_test_labels.npy")
 
-    # loading TTAs
-    tta_features = np.load(disk_path + f"{dataset_name}_tta_features.npy")
-    tta_labels = np.load(disk_path + f"{dataset_name}_tta_labels.npy")
+    # # loading TTAs
+    # tta_features = np.load(disk_path + f"{dataset_name}_tta_features.npy")
+    # tta_labels = np.load(disk_path + f"{dataset_name}_tta_labels.npy")
+
+    preprocessed_zip = np.load(disk_path + f"{dataset_name}_preprocessed.npz")
+
+    # extracting training set features and labels
+    train_features, train_labels = preprocessed_zip['train_features'], preprocessed_zip['train_labels']
+    
+    # extracting test set features and labels
+    test_features, test_labels = preprocessed_zip['test_features'], preprocessed_zip['test_labels']
+
+    # extracting TTAs features and labels
+    tta_features, tta_labels = preprocessed_zip['tta_features'], preprocessed_zip['tta_labels']
 
     # getting the dimensionality of the dataset
     features_dim = train_features.shape[-1]
