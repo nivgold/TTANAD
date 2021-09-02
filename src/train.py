@@ -36,9 +36,8 @@ def train_estimator(train_ds, features_dim, args):
     decoder = Decoder(original_dim=features_dim)
 
     # training loop
-    # tqdm_total_bar = args.num_epochs
-    # for epoch in tqdm(range(args.num_epochs), total=tqdm_total_bar):
-    for epoch in range(args.num_epochs):
+    tqdm_total_bar = args.num_epochs
+    for epoch in tqdm(range(args.num_epochs), total=tqdm_total_bar):
         epoch_loss_mean = tf.keras.metrics.Mean()
 
         for step, (x_batch_train, y_batch_train) in enumerate(train_ds):
