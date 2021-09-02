@@ -61,7 +61,7 @@ if __name__ == '__main__':
     # getting the dataset to preprocess
     parser = argparse.ArgumentParser()
     parser.add_argument('-d', "--dataset", required=True, dest='dataset_name', type=str, help='the dataset to preprocess and save to disk for later use')
-    parser.add_argument('-w', "--windowsize", dest='window_size', type=int, help="The size of the sliding window to know which preprocessed file to load")
+    parser.add_argument('-w', "--windowsize", required=True, dest='window_size', type=int, help="The size of the sliding window to know which preprocessed file to load")
     parser.add_argument("-e", "--epochs", dest="num_epochs", default=300, type=int, help="The number of epochs to train with the anomaly detector model")
     parser.add_argument('-b', "--batchsize", dest="batch_size", default=32, type=int, help="The batch size used for training")
     args = parser.parse_args()
