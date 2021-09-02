@@ -11,36 +11,25 @@ def load_dataset(args):
     """
 
     # loading preprocssed data
-    preproceseed_data, features_dim = load_preprocessed(args.dataset_name)
+    preproceseed_data, features_dim = load_preprocessed(args.dataset_name, args.window_size)
 
     train_ds, test_ds = make_dataset(preproceseed_data, args)
 
     return train_ds, test_ds, features_dim
 
-def load_preprocessed(dataset_name):
+def load_preprocessed(dataset_name, window_size):
     """
     Loading saved preprocessed dataset files (training set, test set, TTAs)
 
     Parameters
     ----------
     dataset_name: str. The name of the preprocessed dataset to load
+    window_size: int. The size of the sliding window.
     """
     
     disk_path = '../data/' + dataset_name + "/"
 
-    # # loading training set features and labels
-    # train_features = np.load(disk_path + f"{dataset_name}_train_features.npy")
-    # train_labels = np.load(disk_path + f"{dataset_name}_train_labels.npy")
-
-    # # loading test set features and labels
-    # test_features = np.load(disk_path + f"{dataset_name}_test_features.npy")
-    # test_labels = np.load(disk_path + f"{dataset_name}_test_labels.npy")
-
-    # # loading TTAs
-    # tta_features = np.load(disk_path + f"{dataset_name}_tta_features.npy")
-    # tta_labels = np.load(disk_path + f"{dataset_name}_tta_labels.npy")
-
-    preprocessed_zip = np.load(disk_path + f"{dataset_name}_preprocessed.npz")
+    preprocessed_zip = np.load(disk_path + f"{dataset_name}_preprocessed_{window_size}_window_size.npz")
 
     # extracting training set features and labels
     train_features, train_labels = preprocessed_zip['train_features'], preprocessed_zip['train_labels']
