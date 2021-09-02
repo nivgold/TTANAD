@@ -174,7 +174,7 @@ def preprocessing(dataset_name, args):
 
     # saving preprocessed dataset to disk
     print(f'--- Saving Preprocessed files to disk ---')
-    save_to_disk(train_features, train_labels, test_features, test_labels, tta_features, tta_labels, dataset_name)
+    save_to_disk(train_features, train_labels, test_features, test_labels, tta_features, tta_labels, dataset_name, window_size)
 
 def convert_target_to_int(df, label_col, normal_class):
     """
@@ -296,7 +296,7 @@ def create_TTA(test_df, label_col, window_size):
     
     return tta_features, tta_labels
 
-def save_to_disk(train_features, train_labels, test_features, test_labels, tta_features, tta_labels, dataset_name):
+def save_to_disk(train_features, train_labels, test_features, test_labels, tta_features, tta_labels, dataset_name, num_TTAs):
     """
     Saving the preprocessed data to the disk
 
@@ -309,14 +309,13 @@ def save_to_disk(train_features, train_labels, test_features, test_labels, tta_f
     tta_features:  pandas' DataFrame. The features of the tta data
     tta_labels: pandas' Series. The labels of the tta data
     dataset_name: str. The name of the current preprocessed datasetet
+    num_TTAs: int. The number of TTAs to create which is also the size of the sliding window
     """
 
     disk_path = "../data/" + dataset_name + "/"
 
-    num_tta = tta_features.shape[1]
-
     # saving in a compressed zip file
-    np.savez_compressed(disk_path + f"{dataset_name}_preprocessed_{num_tta}_TTA", train_features=train_features.values, train_labels=train_labels.values, test_features=test_features.values, test_labels=test_labels.values, tta_features=tta_features, tta_labels=tta_labels)
+    np.savez_compressed(disk_path + f"{dataset_name}_preprocessed_{num_TTAs}_TTA", train_features=train_features.values, train_labels=train_labels.values, test_features=test_features.values, test_labels=test_labels.values, tta_features=tta_features, tta_labels=tta_labels)
 
 
 if __name__ == '__main__':
@@ -334,5 +333,9 @@ if __name__ == '__main__':
     if dataset_name not in DATASET_DATA_FILE.keys():
         raise ValueError("Provided dataset is not supported")
 
+    # checking if the given dataset is IDS18 so we shouldn't load all the data
+    if dataset_name == 'ids18' and args.nrows == -1:
+        # if IDS18 was selected for preprocessing and nrows remained -1, the default number of rows to load is 3M.
+        args.nrows = 3000000
     print(f"--- Starting preprocess {dataset_name} dataset ---")
     preprocessing(dataset_name, args)
