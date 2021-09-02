@@ -1,4 +1,5 @@
 import tensorflow as tf
+from tqdm import tqdm
 
 from autoencoder_model import Encoder, Decoder
 
@@ -35,6 +36,8 @@ def train_estimator(train_ds, features_dim, args):
     decoder = Decoder(original_dim=features_dim)
 
     # training loop
+    # tqdm_total_bar = args.num_epochs
+    # for epoch in tqdm(range(args.num_epochs), total=tqdm_total_bar):
     for epoch in range(args.num_epochs):
         epoch_loss_mean = tf.keras.metrics.Mean()
 
