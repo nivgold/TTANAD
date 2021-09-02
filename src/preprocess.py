@@ -169,8 +169,8 @@ def preprocessing(dataset_name, args):
     train_features = train_df.drop(columns=[label_col], axis=1)
 
     # extracting features and labels from test set
-    test_labels = test_df[5:-5:5][label_col]
-    test_features = test_df[5:-5:5].drop(columns=[label_col], axis=1)
+    test_labels = test_df[window_size:-window_size:window_size][label_col]
+    test_features = test_df[window_size:-window_size:window_size].drop(columns=[label_col], axis=1)
 
     # saving preprocessed dataset to disk
     print(f'--- Saving Preprocessed files to disk ---')
@@ -276,7 +276,7 @@ def create_TTA(test_df, label_col, window_size):
     window_size: int. The size of the window.
     """
 
-    test_norm_df = test_df[5:-5:5]
+    test_norm_df = test_df[window_size:-window_size:window_size]
 
     tta_labels = []
     tta_features = []
