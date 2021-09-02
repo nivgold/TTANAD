@@ -313,23 +313,10 @@ def save_to_disk(train_features, train_labels, test_features, test_labels, tta_f
 
     disk_path = "../data/" + dataset_name + "/"
 
-    # # save preprocessed training set
-    # print('--- Saving preprocessed training set ---')
-    # np.save(disk_path + f'{dataset_name}_train_features.npy', train_features.values)
-    # np.save(disk_path + f'{dataset_name}_train_labels.npy', train_labels.values)
-
-    # # save preprocessed test set
-    # print("--- Saving preprocessed test set ---")
-    # np.save(disk_path + f'{dataset_name}_test_features.npy', test_features.values)
-    # np.save(disk_path + f'{dataset_name}_test_labels.npy', test_labels.values)
-    
-    # # save TTAs
-    # print('--- Saving TTAs ---')
-    # np.save(disk_path + f'{dataset_name}_tta_features.npy', tta_features)
-    # np.save(disk_path + f'{dataset_name}_tta_labels.npy', tta_labels)
+    num_tta = tta_features.shape[1]
 
     # saving in a compressed zip file
-    np.savez_compressed(disk_path + f"{dataset_name}_preprocessed", train_features=train_features.values, train_labels=train_labels.values, test_features=test_features.values, test_labels=test_labels.values, tta_features=tta_features, tta_labels=tta_labels)
+    np.savez_compressed(disk_path + f"{dataset_name}_preprocessed_{num_tta}_TTA", train_features=train_features.values, train_labels=train_labels.values, test_features=test_features.values, test_labels=test_labels.values, tta_features=tta_features, tta_labels=tta_labels)
 
 
 if __name__ == '__main__':
