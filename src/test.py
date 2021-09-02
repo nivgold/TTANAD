@@ -93,7 +93,7 @@ def print_test_results(algorithms_metrics_dict, args):
     args: argparse args. The args to the program    
     """
     
-    print(f"--- Reults of {args.dataset_name} ---")
+    print(f"--- Reults of {args.dataset_name} with window size {args.window_size}---")
     for algorithm, metrics in algorithms_metrics_dict.items():
         algorithm_name = algorithm.replace("_", " ")
         print("*"*100)
