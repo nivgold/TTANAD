@@ -1,2 +1,2 @@
-# TS-ADTTA
-Time-Series Anomaly Detection with Test-Time Augmentation
+# TTANAD
+Test-Time Augmentation for Network Anomaly Detection
