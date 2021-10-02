@@ -12,9 +12,10 @@ The official code of the paper "Test-Time Augmentation for Network Anomaly Detec
 
 As described in the paper, the experiments were conducted using the two well-known datasets CIC-IDS2017, CSE-CIC-IDS2018 from the [Canadian Institute for Cybersecurity](https://www.unb.ca/cic/datasets/): 
 
-* **CIC-IDS2017 - **includes eight different files containing five days' normal and malicious traffic data. Combining these files results in roughly 3 million instances and 83 features with 15 labels - 1 normal and 14 attack labels.
+* **CIC-IDS2017** - includes eight different files containing five days' normal and malicious traffic data. Combining these files results in roughly 3 million instances and 83 features with 15 labels - 1 normal and 14 attack labels.
 
-* **CSE-CIC-IDS2018 - **contains about 16 million instances collected over ten days, with roughly 17% of the instances compromised of malicious traffic.
+* **CSE-CIC-IDS2018** - contains about 16 million instances collected over ten days, with roughly 17% of the instances compromised of malicious traffic.
+
 
 ## Dependencies
 
