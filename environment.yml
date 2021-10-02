@@ -1,4 +1,4 @@
-name: adtta
+name: ttanad
 channels:
   - rapidsai
   - conda-forge
