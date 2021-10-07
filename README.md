@@ -56,7 +56,7 @@ $ python preprocess.py --dataset ids18 --windowsize 5
 
 * ### **Train & Test**
 
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;To train the anomaly detector:
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;To train and test the anomaly detector after preprocessed the desired dataset:
 
 ```bash
 $ cd src/
