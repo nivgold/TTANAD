@@ -62,6 +62,20 @@ DATASET_DATA_FILE = {
                                'Init Fwd Win Byts', 'Init Bwd Win Byts', 'Fwd Act Data Pkts',
                                'Fwd Seg Size Min', 'Active Mean', 'Active Std', 'Active Max',
                                'Active Min', 'Idle Mean', 'Idle Std', 'Idle Max', 'Idle Min']
+    },
+    'unsw-nb15': {
+        'data': 'unsw-nb15.csv',
+        'normal_class': 'Benign',
+        'label_col': 'Label',
+        'features': ['dur', 'sbytes', 'dbytes', 'sttl', 'dttl', 'sloss', 'dloss',
+                               'Sload', 'Dload', 'Spkts', 'Dpkts', 'swin', 
+                               'dwin', 'stcpb', 'dtcpb', 'smeansz', 'dmeansz',
+                               'trans_depth', 'res_bdy_len', 'Sjit', 'Djit',
+                               'Sintpkt', 'Dintpkt', 'tcprtt', 'synack',
+                               'ackdat', 'is_sm_ips_ports', 'ct_state_ttl', 'ct_flw_http_mthd',
+                               'is_ftp_login', 'ct_ftp_cmd', 'ct_srv_src', 'ct_srv_dst',
+                               'ct_dst_ltm', 'ct_src_ ltm', 'ct_src_dport_ltm', 'ct_dst_sport_ltm',
+                               'ct_dst_src_ltm', 'Label']
     }
 }
 
@@ -186,8 +200,8 @@ def convert_target_to_int(df, label_col, normal_class):
     label_col: str. The target column name
     normal_class: The name of the class that indicate "not anomalous"
     """
-
-    df[label_col] = np.where(df[label_col] == normal_class, 0, 1)
+    if not pd.api.types.is_numeric_dtype(df[label_col].dtype):
+        df[label_col] = np.where(df[label_col] == normal_class, 0, 1)
     
     return df
 
@@ -334,7 +348,7 @@ if __name__ == '__main__':
         raise ValueError("Provided dataset is not supported")
 
     # checking if the given dataset is IDS18 so we shouldn't load all the data
-    if dataset_name == 'ids18' and args.nrows == -1:
+    if dataset_name in 'ids18' and args.nrows == -1:
         # if IDS18 was selected for preprocessing and nrows remained -1, the default number of rows to load is 3M.
         args.nrows = 3000000
     print(f"--- Starting preprocess {dataset_name} dataset ---")
