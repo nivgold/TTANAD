@@ -1,77 +1,147 @@
 import numpy as np
 import tensorflow as tf
 from tqdm import tqdm
-from sklearn.metrics import roc_auc_score
+from sklearn.metrics import roc_auc_score, precision_recall_curve
+
+from prettytable import PrettyTable
 
 evaluated_algorithms = [
     'WO_TTA_Baseline',
     'Sliding_Window_TTA',
 ]
 
+evaluated_estimators = [
+    'Isolation Forest',
+    # 'Local Outlier Factor',
+    # 'One-Class SVM',
+    'Autoencoder'
+]
 
-def test(test_ds, trained_estimator, args):
+
+def test(test_ds, if_estimator, AE_estimator, args):
     """
     Performing test phase on the test set with all of the compared algorithms described in the Experiments section
 
     Parameters
     ----------
     test_ds: TF's Dataset. The test set
-    trained_estimator: tuple. The trained estimator. In that case, containing the trained encoder and decoder
+    if_estimator: scikit-learn's IsolationForest. The trained Isolation Forest model.
+    lof_estiamtor: scikit-learn's LocalOutlierFactor. The trained Local Outlier Factor model.
+    ocs_estimator: scikit-learn's OneClassSVM. The trained One Class SVM model.
+    AE_estimator: tuple of tensorflow's Dataset. The trained AE estimator. In that case, containing the trained encoder and decoder
     args: argparse args. The args to the program
     """
 
     # testing
-    algorithms_metrics = test_loop(test_ds, trained_estimator, args)
+    algorithms_metrics = test_loop(test_ds, if_estimator, AE_estimator, args)
 
     # printing experiments results
     print_test_results(algorithms_metrics, args)
 
-def test_loop(test_ds, trained_estimator, args):
+def test_loop(test_ds, if_estimator, AE_estimator, args):
     """
     The test loop implementation on every evaluated algorithm
 
     Parameters
     ----------
     test_ds: TF's Dataset. The test set
-    trained_estimator: tuple. The trained estimator. In that case, containing the trained encoder and decoder
+    if_estimator: scikit-learn's IsolationForest. The trained Isolation Forest model.
+    lof_estiamtor: scikit-learn's LocalOutlierFactor. The trained Local Outlier Factor model.
+    ocs_estimator: scikit-learn's OneClassSVM. The trained One Class SVM model.
+    AE_estimator: tuple of tensorflow's Dataset. The trained AE estimator. In that case, containing the trained encoder and decoder
     args: argparse args. The args to the program
     """
 
     # extracting encoder & decoder
-    encoder, decoder = trained_estimator
+    encoder, decoder = AE_estimator
 
     # setting up training configurations
     loss_func = tf.keras.losses.MeanSquaredError(reduction=tf.keras.losses.Reduction.NONE)
 
-    algorithms_test_loss = {algorithm: [] for algorithm in evaluated_algorithms}    
-    algorithms_metrics = {algorithm: {} for algorithm in evaluated_algorithms}
+    algorithms_test_loss = {algorithm: {estimator: [] for estimator in evaluated_estimators} for algorithm in evaluated_algorithms}
+    algorithms_metrics = {algorithm: {estimator: {} for estimator in evaluated_estimators} for algorithm in evaluated_algorithms}
 
     test_labels = []
+    test_X = []
+    tta_X = []
     tqdm_total_bar = test_ds.cardinality().numpy()
     for step, (x_batch_test, y_batch_test, tta_features_batch, tta_labels_batch) in tqdm(enumerate(test_ds), total=tqdm_total_bar):
-        reconstruction_loss = test_step(x_batch_test, encoder, decoder, loss_func).numpy()
+        test_X.append(x_batch_test)
+        tta_X.append(tta_features_batch)
+
+        # saving anomaly score on original test instace
+        AE_reconstruction_loss = test_step(x_batch_test, encoder, decoder, loss_func).numpy()
+
 
         # saving ground-truth
         test_labels.append(y_batch_test.numpy())
 
         # saving baseline test loss
-        algorithms_test_loss['WO_TTA_Baseline'].append(reconstruction_loss)
+        algorithms_test_loss['WO_TTA_Baseline']['Autoencoder'].append(AE_reconstruction_loss)
 
         # saving TTA test loss
-        tta_reconstructions = test_step(tta_features_batch, encoder, decoder, loss_func).numpy()
-        for original_loss, tta_loss in list(zip(reconstruction_loss, tta_reconstructions)):
+        AE_tta_reconstructions = test_step(tta_features_batch, encoder, decoder, loss_func).numpy()
+
+        # for original_loss, tta_loss in list(zip(if_anomaly_score, if_tta_anomaly_score)):
+        #     aggregated_loss = np.concatenate([[original_loss], tta_loss], axis=0)
+        #     algorithms_test_loss['Sliding_Window_TTA']['Isolation Forest'].append(np.mean(aggregated_loss))
+
+        # for original_loss, tta_loss in list(zip(lof_anomaly_score, lof_tta_anomaly_score)):
+        #     aggregated_loss = np.concatenate([[original_loss], tta_loss], axis=0)
+        #     algorithms_test_loss['Sliding_Window_TTA']['Local Outlier Factor'].append(np.mean(aggregated_loss))
+
+        # for original_loss, tta_loss in list(zip(ocs_anomaly_score, ocs_tta_anomaly_score)):
+        #     aggregated_loss = np.concatenate([[original_loss], tta_loss], axis=0)
+        #     algorithms_test_loss['Sliding_Window_TTA']['One-Class SVM'].append(np.mean(aggregated_loss))
+
+        for original_loss, tta_loss in list(zip(AE_reconstruction_loss, AE_tta_reconstructions)):
             aggregated_loss = np.concatenate([[original_loss], tta_loss], axis=0)
-            algorithms_test_loss['Sliding_Window_TTA'].append(np.mean(aggregated_loss))
+            algorithms_test_loss['Sliding_Window_TTA']['Autoencoder'].append(np.mean(aggregated_loss))
 
     # flatten
-    algorithms_test_loss['WO_TTA_Baseline'] = np.concatenate(algorithms_test_loss['WO_TTA_Baseline'], axis=0)
+    test_X = np.concatenate(test_X, axis=0)
+    tta_X = np.concatenate(tta_X, axis=0)
+
+    
+    if_anomaly_score = if_test_step(test_X, if_estimator)
+    # lof_anomaly_score = lof_test_step(test_X, lof_estiamtor)
+    # ocs_anomaly_score = ocs_test_step(test_X, ocs_estimator)
+
+    algorithms_test_loss['WO_TTA_Baseline']['Isolation Forest'] = if_anomaly_score
+    # algorithms_test_loss['WO_TTA_Baseline']['Local Outlier Factor'] = lof_anomaly_score
+    # algorithms_test_loss['WO_TTA_Baseline']['One-Class SVM'] = ocs_anomaly_score
+
+    num_samples, num_tta, num_features = tta_X.shape
+    if_tta_anomaly_score = if_test_step(tta_X.reshape(num_samples*num_tta, num_features), if_estimator).reshape(num_samples, num_tta)
+    # lof_tta_anomaly_score = lof_test_step(tta_X.reshape(num_samples*num_tta, num_features), lof_estiamtor).reshape(num_samples, num_tta)
+    # ocs_tta_anomaly_score = ocs_test_step(tta_X.reshape(num_samples*num_tta, num_features), ocs_estimator).reshape(num_samples, num_tta)
+
+    if_total_anomaly_score = np.concatenate([if_tta_anomaly_score, np.expand_dims(if_anomaly_score, axis=1)], axis=1)
+    # lof_total_anomaly_score = np.concatenate([lof_tta_anomaly_score, np.expand_dims(lof_anomaly_score, axis=1)], axis=1)
+    # ocs_total_anomaly_score = np.concatenate([ocs_tta_anomaly_score, np.expand_dims(ocs_anomaly_score, axis=1)], axis=1)
+
+    algorithms_test_loss['Sliding_Window_TTA']['Isolation Forest'] = np.mean(if_total_anomaly_score, axis=1)
+    # algorithms_test_loss['Sliding_Window_TTA']['Local Outlier Factor'] = np.mean(lof_total_anomaly_score, axis=1)
+    # algorithms_test_loss['Sliding_Window_TTA']['One-Class SVM'] = np.mean(ocs_total_anomaly_score, axis=1)
+
+
+    # algorithms_test_loss['WO_TTA_Baseline']['Isolation Forest'] = np.concatenate(algorithms_test_loss['WO_TTA_Baseline']['Isolation Forest'], axis=0)
+    # algorithms_test_loss['WO_TTA_Baseline']['Local Outlier Factor'] = np.concatenate(algorithms_test_loss['WO_TTA_Baseline']['Local Outlier Factor'], axis=0)
+    # algorithms_test_loss['WO_TTA_Baseline']['One-Class SVM'] = np.concatenate(algorithms_test_loss['WO_TTA_Baseline']['One-Class SVM'], axis=0)
+    algorithms_test_loss['WO_TTA_Baseline']['Autoencoder'] = np.concatenate(algorithms_test_loss['WO_TTA_Baseline']['Autoencoder'], axis=0)
     test_labels = np.concatenate(test_labels, axis=0)
 
     y_true = np.asarray(test_labels).astype(int)
 
     # calculating AUC
     for algorithm in evaluated_algorithms:
-        algorithms_metrics[algorithm]['AUC'] = roc_auc_score(y_true, algorithms_test_loss[algorithm])
+        for estimator in evaluated_estimators:
+            algorithms_metrics[algorithm][estimator]['AUC'] = roc_auc_score(y_true, algorithms_test_loss[algorithm][estimator])
+            optimal_f1, optimal_precision, optimal_recall = get_optimal_f1_precision_recall(y_true, algorithms_test_loss[algorithm][estimator])
+            algorithms_metrics[algorithm][estimator]['F1'] = optimal_f1
+            algorithms_metrics[algorithm][estimator]['Precision'] = optimal_precision
+            algorithms_metrics[algorithm][estimator]['Recall'] = optimal_recall
+
 
     return algorithms_metrics
 
@@ -83,26 +153,120 @@ def test_step(inputs, encoder, decoder, loss_func):
 
     return reconstruction_loss
 
+def get_optimal_f1_precision_recall(y_true, y_pred):
+    '''
+    Maximizing F1 score to find the optimal threshold
+    '''
+
+    precision, recall, thresholds = precision_recall_curve(y_true, y_pred)
+    fscore = 2 * (precision * recall) / (precision + recall)
+    # locate the index of the largest f score
+    ix = np.nanargmax(fscore)
+    optimal_thr = thresholds[ix]
+    optimal_f1 = fscore[ix]
+    optimal_precision = precision[ix]
+    optimal_recall = recall[ix]
+
+    return optimal_f1, optimal_precision, optimal_recall
+
+
+def if_test_step(test_X, trained_if):
+    """
+    A test phase with Isolation Forest on the given test set
+    Parameters
+    ----------
+    test_X: numpy ndarray of shape (batch_size, num_augmentations, dataset's features dim) or (batch_size, dataset's features dim). The batch test set
+    trained_if: scikit-learn's IsolationForest. The trained Isolation Forest as anomaly detection estimator
+    """
+
+    if len(test_X.shape) == 3:
+        batch_anomaly_score = []
+        for one_test_tta_samples in test_X:
+            anomaly_score = -1 * trained_if.score_samples(one_test_tta_samples)
+            batch_anomaly_score.append(anomaly_score)
+
+        anomaly_score = np.array(batch_anomaly_score)
+    else:
+        anomaly_score = -1 * trained_if.score_samples(test_X)
+
+    return anomaly_score
+
+def lof_test_step(test_X, trained_lof):
+    """
+    A test phase with Local Outlier Factor on the given test set
+    Parameters
+    ----------
+    test_X: numpy ndarray of shape (batch_size, dataset's features dim). The batch test set
+    trained_lof: scikit-learn's LocalOutlierFactor. The trained Local Outlier Factor as anomaly detection estimator
+    """
+
+    if len(test_X.shape) == 3:
+        batch_anomaly_score = []
+        for one_test_tta_samples in test_X:
+            anomaly_score = -1 * trained_lof.score_samples(one_test_tta_samples)
+            batch_anomaly_score.append(anomaly_score)
+
+        anomaly_score = np.array(batch_anomaly_score)
+    else:
+        anomaly_score = -1 * trained_lof.score_samples(test_X)
+
+    return anomaly_score
+
+def ocs_test_step(test_X, trained_ocs):
+    """
+    A test phase with One-Class SVM on the given test set
+    Parameters
+    ----------
+    test_X: numpy ndarray of shape (batch_size, dataset's features dim). The batch test set
+    trained_ocs: scikit-learn's OneClassSVM. The trained One-Class SVM as anomaly detection estimator
+    """
+
+    if len(test_X.shape) == 3:
+        batch_anomaly_score = []
+        for one_test_tta_samples in test_X:
+            anomaly_score = -1 * trained_ocs.score_samples(one_test_tta_samples)
+            batch_anomaly_score.append(anomaly_score)
+
+        anomaly_score = np.array(batch_anomaly_score)
+    else:
+        anomaly_score = -1 * trained_ocs.score_samples(test_X)
+
+    return anomaly_score
+
 def print_test_results(algorithms_metrics_dict, args):
     """
     Printing the results metrics of all of the evaluated algorithms
 
     Parameters
     ----------
-    algorithms_metrics_dict: dict. Containing the evaluaed metrics for each evaluated algorithm
+    algorithms_metrics_dict: dict. Containing the evaluaed metrics for each evaluated algorithm and each evaluated estimator
     args: argparse args. The args to the program    
     """
-    
+
     print(f"--- Reults of {args.dataset_name} with window size {args.window_size}---")
-    for algorithm, metrics in algorithms_metrics_dict.items():
-        algorithm_name = algorithm.replace("_", " ")
-        print("*"*100)
-        print(f"--- {algorithm_name} ---")
-        # print_list = []
-        # for i in range(len(folds_metrics.mean(axis=0))):
-        #     print_list.append(folds_metrics.mean(axis=0)[i])
-        #     print_list.append(folds_metrics.std(axis=0)[i])
-        # print("AUC : {:0.3f}+-{:0.3f}".format(*print_list))
-        print("AUC: {AUC}".format(**algorithms_metrics_dict[algorithm]))
-    
+
+    # AUC
+    print_metric_table(algorithms_metrics_dict, "AUC")
+    # F1
+    print_metric_table(algorithms_metrics_dict, "F1")
+    # Precision
+    print_metric_table(algorithms_metrics_dict, "Precision")
+    # Recall
+    print_metric_table(algorithms_metrics_dict, "Recall")
+
+def print_metric_table(algorithms_metrics_dict, metric):
+    table = PrettyTable()
+    table.field_names = ['Algorithm'] + evaluated_estimators.copy()
+
+    print(f"--- {metric} ---")
+    for algorithm in algorithms_metrics_dict:
+        estimator_row = []
+        estimator_row.append(algorithm)
+        for estimator in evaluated_estimators:
+            current_auc = algorithms_metrics_dict[algorithm][estimator][metric]
+            estimator_row.append(current_auc)
+        
+        table.add_row(estimator_row)
+
+    print(table)
     print("*"*100)

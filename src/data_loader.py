@@ -1,5 +1,6 @@
 import numpy as np
 import tensorflow as tf
+import utils
 
 def load_dataset(args):
     """
@@ -13,9 +14,9 @@ def load_dataset(args):
     # loading preprocssed data
     preproceseed_data, features_dim = load_preprocessed(args.dataset_name, args.window_size)
 
-    train_ds, test_ds = make_dataset(preproceseed_data, args)
+    datasets = make_dataset(preproceseed_data, args)
 
-    return train_ds, test_ds, features_dim
+    return datasets, features_dim
 
 def load_preprocessed(dataset_name, window_size):
     """
@@ -63,21 +64,19 @@ def make_dataset(preprocessed_data, args):
     test_features, test_labels = preprocessed_data[2], preprocessed_data[3]
     tta_features, tta_labels = preprocessed_data[4], preprocessed_data[5]
 
-    # creating training dataset
-    train_ds = (tf.data.Dataset.from_tensor_slices((train_features, train_labels))
-                .cache()
-                .batch(args.batch_size)
-                # .map(train_pack_features_vector)
-    )
-
-    # creating test dataset
-    test_ds = (tf.data.Dataset.from_tensor_slices((test_features, test_labels, tta_features, tta_labels))
-                .cache()
-                .batch(args.batch_size)
-                # .map(test_pack_features_vector)
-    )
-
-    return train_ds, test_ds
+    end_training_idx =  int(train_features.shape[0] * 0.7)
+    train_train_features, train_train_labels = train_features[:end_training_idx, :], train_labels[:end_training_idx]
+    validation_features, validation_labels = train_features[end_training_idx:, :], train_labels[end_training_idx:]
+    train_ds, validation_ds, test_ds = utils.create_tf_datasets(train_train_features, train_train_labels, 
+                                                                validation_features, validation_labels,
+                                                                test_features, test_labels,
+                                                                tta_features, tta_labels, args)
+ 
+    return train_train_features, train_train_labels, \
+           validation_features, validation_labels, \
+           test_features, test_labels, \
+           tta_features, tta_labels, \
+           train_ds, validation_ds, test_ds
 
 def train_pack_features_vector(features, labels):
   """Pack the features into a single array."""
