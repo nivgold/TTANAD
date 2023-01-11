@@ -1,5 +1,6 @@
 import os
 import time
+
 # ignoring TF info messages
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
@@ -12,7 +13,7 @@ from data_loader import load_dataset
 from train import train
 from test import test
 
-DATASETS = ['ids17', 'ids18']
+DATASETS = ['ids17', 'ids18', 'unsw-nb15']
 
 def get_execute_time(start_time, end_time):
     hours, rem = divmod(end_time - start_time, 3600)
@@ -35,15 +36,17 @@ def run_experiment(args):
     # loading the preprocessed dataset
     print(f"--- Loading preprocessed {args.dataset_name} dataset ---")
     start_time = time.time()
-    train_ds, test_ds, features_dim = load_dataset(args)
+    preprocessed_datasets, features_dim = load_dataset(args)
     end_time = time.time()
     print(f"--- {args.dataset_name} dataset ready after: ", end='')
     get_execute_time(start_time, end_time)
 
+    train_train_features, train_train_labels, validation_features, validation_labels, test_features, test_labels, tta_features, tta_labels, train_ds, validation_ds, test_ds = preprocessed_datasets
+    
     # training
     print("--- Start training ---")
     start_time = time.time()
-    trained_estimator = train(train_ds, features_dim, args)
+    if_estimator, AE_estimator = train(train_ds, validation_ds, features_dim, args)
     end_time = time.time()
     print("--- Training finished after: ", end='')
     get_execute_time(start_time, end_time)
@@ -51,7 +54,7 @@ def run_experiment(args):
     # testing
     print("--- Start testing ---")
     start_time = time.time()
-    test(test_ds, trained_estimator, args)
+    test(test_ds, if_estimator, AE_estimator, args)
     end_time = time.time()
     print("--- Testing finished after: ", end='')
     get_execute_time(start_time, end_time)
@@ -61,9 +64,10 @@ if __name__ == '__main__':
     # getting the dataset to preprocess
     parser = argparse.ArgumentParser()
     parser.add_argument('-d', "--dataset", required=True, dest='dataset_name', type=str, help='the dataset to preprocess and save to disk for later use')
-    parser.add_argument('-w', "--windowsize", required=True, dest='window_size', type=int, help="The size of the sliding window to know which preprocessed file to load")
+    parser.add_argument('-w', "--window-size", required=True, dest='window_size', type=int, help="The size of the sliding window to know which preprocessed file to load")
     parser.add_argument("-e", "--epochs", dest="num_epochs", default=300, type=int, help="The number of epochs to train with the anomaly detector model")
-    parser.add_argument('-b', "--batchsize", dest="batch_size", default=32, type=int, help="The batch size used for training")
+    parser.add_argument('-b', "--batch-size", dest="batch_size", default=32, type=int, help="The batch size used for training")
+    parser.add_argument('-a', "--early-stopping-patience", dest="early_stopping_patience", default=5, type=int, help="The number of epochs for early stopping patience")
     args = parser.parse_args()
 
     # adding support for runnning all of the available datasets
