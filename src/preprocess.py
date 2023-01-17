@@ -325,13 +325,15 @@ def roll_dataset(df, features, label_col, prefixspan_col, window_size, isnorm, T
     db = [df_[prefixspan_col].tolist() for df_ in tqdm(df_features.rolling(window_size), total=len(df_features), desc="Construct Sequence DB")]
     db = np.array(db[window_size:])
 
-    db = StandardScaler().fit_transform(db)
+    
 
     # remove infs
     db[np.isinf(db)] = -999
     
     # remove NaNs from sequences
     db[np.isnan(db)] = -999
+
+    db = StandardScaler().fit_transform(db)
 
     sax = SymbolicAggregateApproximation(n_bins=3, strategy='normal')
     print("Performin SAX")
