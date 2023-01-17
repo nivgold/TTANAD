@@ -1,6 +1,6 @@
 import pandas as pd
 import numpy as np
-from sklearn.preprocessing import MinMaxScaler
+from sklearn.preprocessing import MinMaxScaler, StandardScaler
 from statsmodels.tsa.holtwinters import SimpleExpSmoothing
 from statsmodels.tsa.arima.model import ARIMA
 import argparse
@@ -9,8 +9,8 @@ from prefixspan import PrefixSpan
 from pyts.approximation import SymbolicAggregateApproximation
 from tqdm import tqdm
 
-import warnings
-warnings.simplefilter("ignore", UserWarning)
+# import warnings
+# warnings.simplefilter("ignore", UserWarning)
 
 DATASET_DATA_FILE = {
     'ids17': {
@@ -180,12 +180,14 @@ def preprocessing(dataset_name, args):
     print(f"--- Filtering out anomalous samples from training set ---")
     train_df = train_df[train_df[label_col] == 0]
 
+    train_df = train_df.reset_index(drop=True)
+    test_df = test_df.reset_index(drop=True)
+
     # rolling the dataset to obtain statistics every 5 'ticks'
     print(f'--- Rolling training set ---')
-    print(DATASET_DATA_FILE[dataset_name]['prefixspan_col'])
-    train_df = roll_dataset(train_df, features, label_col, DATASET_DATA_FILE[dataset_name]['prefixspan_col'], window_size, isnorm=True)
+    train_df, TIRPS = roll_dataset(train_df, features, label_col, DATASET_DATA_FILE[dataset_name]['prefixspan_col'], window_size, isnorm=True)
     print(f'--- Rolling test set ---')
-    test_df = roll_dataset(test_df, features, label_col, DATASET_DATA_FILE[dataset_name]['prefixspan_col'], window_size, isnorm=False)
+    test_df, TIRPS = roll_dataset(test_df, features, label_col, DATASET_DATA_FILE[dataset_name]['prefixspan_col'], window_size, isnorm=False, TIRPS=TIRPS)
 
     # normalizing
     print(f'--- Normalizing training set ---')
@@ -195,15 +197,16 @@ def preprocessing(dataset_name, args):
 
     # create tta
     print(f'--- Creating TTAs ---')
-    tta_features, tta_labels = create_TTA(test_df, label_col, window_size)
+    tta_features, tta_labels = create_TTA(test_df, label_col, window_size, step=args.tta_step)
 
     # extracting features and labels from training set
     train_labels = train_df[label_col]
     train_features = train_df.drop(columns=[label_col], axis=1)
 
     # extracting features and labels from test set
-    test_labels = test_df[window_size:-window_size:window_size][label_col]
-    test_features = test_df[window_size:-window_size:window_size].drop(columns=[label_col], axis=1)
+    test_df = test_df[window_size:-window_size:window_size]
+    test_labels = test_df[label_col]
+    test_features = test_df.drop(columns=[label_col], axis=1)
 
     # saving preprocessed dataset to disk
     print(f'--- Saving Preprocessed files to disk ---')
@@ -273,12 +276,12 @@ def train_test_split(df, test_ratio):
     train_ratio = 1 - test_ratio
     
     train_last_idx = int(len(df) * train_ratio)
-    train_df = df.iloc[train_last_idx:, :].reset_index(drop=True)
-    test_df = df.iloc[:train_last_idx, :].reset_index(drop=True)
+    train_df = df.iloc[:train_last_idx, :].reset_index(drop=True)
+    test_df = df.iloc[train_last_idx:, :].reset_index(drop=True)
     
     return train_df, test_df
 
-def roll_dataset(df, features, label_col, prefixspan_col, window_size, isnorm):
+def roll_dataset(df, features, label_col, prefixspan_col, window_size, isnorm, TIRPS=None):
     """
     Convolve a window over the given data and extact statistics (min, max, std).
 
@@ -296,7 +299,7 @@ def roll_dataset(df, features, label_col, prefixspan_col, window_size, isnorm):
     # sliding the window
 
     # MAX features
-    rolled_max = df_features.rolling(window_size).max()[window_size+1:]
+    rolled_max = df_features.rolling(window_size).max().iloc[window_size:]
     if isnorm:
         rolled_max = rolled_max[::window_size]
     rolled_max.columns = [f'MAX_{column}' for column in list(rolled_max.columns)]
@@ -306,7 +309,8 @@ def roll_dataset(df, features, label_col, prefixspan_col, window_size, isnorm):
         return pywt.dwt(df_, 'db1')[0][:, 0].tolist()
     rolled_pywt = [perform_dwt(df_) for df_ in tqdm(df_features.rolling(window_size), total=len(df_features), desc="Wavelets")]
     rolled_pywt_df = pd.DataFrame({'all_dwts': rolled_pywt})
-    rolled_pywt_df = pd.DataFrame(rolled_pywt_df['all_dwts'].tolist(), rolled_pywt_df.index)[window_size+1:]
+    rolled_pywt_df = pd.DataFrame(rolled_pywt_df['all_dwts'].tolist(), rolled_pywt_df.index).iloc[window_size:]
+    rolled_pywt_df_index_before_norm = rolled_pywt_df.index
     if isnorm:
         rolled_pywt_df = rolled_pywt_df[::window_size]
     rolled_pywt_df.columns = [f'Wavelet_{i}' for i in range(len(rolled_pywt_df.columns))] # type: ignore
@@ -318,21 +322,27 @@ def roll_dataset(df, features, label_col, prefixspan_col, window_size, isnorm):
 
     # PrefixSpan features
     print("PrefixSpan Features")
-    db = [df_[prefixspan_col].tolist() for df_ in tqdm(df_features.rolling(window_size), total=len(df_features), desc="Construct Sequence DB") if (np.isinf(df_[prefixspan_col]).sum()==0)]
-    db = np.array(db[window_size+1:])
+    db = [df_[prefixspan_col].tolist() for df_ in tqdm(df_features.rolling(window_size), total=len(df_features), desc="Construct Sequence DB")]
+    db = np.array(db[window_size:])
 
+    db = StandardScaler().fit_transform(db)
+
+    # remove infs
+    db[np.isinf(db)] = -999
+    
     # remove NaNs from sequences
-    db = db[np.isnan(db).sum(axis=1) == 0]
+    db[np.isnan(db)] = -999
 
     sax = SymbolicAggregateApproximation(n_bins=3, strategy='normal')
     print("Performin SAX")
     X_sax = sax.fit_transform(db)
 
-    print("PrefixSpan Mining")
-    ps = PrefixSpan(X_sax)
-    ps.minlen = 3
-    min_support = int(0.002*len(X_sax))
-    TIRPS = [tirp[1] for tirp in sorted(ps.frequent(minsup=min_support, closed=True, generator=True), key=lambda tirp: tirp[0], reverse=True)[0:5]]
+    if TIRPS is None:
+        print("PrefixSpan Mining")
+        ps = PrefixSpan(X_sax)
+        ps.minlen = 3
+        min_support = int(0.002*len(X_sax))
+        TIRPS = [tirp[1] for tirp in sorted(ps.frequent(minsup=min_support, closed=True, generator=True), key=lambda tirp: tirp[0], reverse=True)[0:5]]
     
 
     print(f"PrefixSpan TIRPS: {TIRPS}")
@@ -354,24 +364,25 @@ def roll_dataset(df, features, label_col, prefixspan_col, window_size, isnorm):
     rolled_prefixspan = [prefixspan_extraction(i) for i in tqdm(X_sax, desc='TIRPS Extraction', total=len(X_sax))]
     rolled_prefixspan_df = pd.DataFrame({'all_prefixspan': rolled_prefixspan})
     rolled_prefixspan_df = pd.DataFrame(rolled_prefixspan_df['all_prefixspan'].tolist(), rolled_prefixspan_df.index)
+    rolled_prefixspan_df.index = rolled_pywt_df_index_before_norm
     if isnorm:
         rolled_prefixspan_df = rolled_prefixspan_df[::window_size]
     rolled_prefixspan_df.columns = [f'TIRP_{i}' for i in range(len(rolled_prefixspan_df.columns))] # type: ignore
 
     # MIN features
-    rolled_min = df_features.rolling(window_size).min()[window_size+1:]
+    rolled_min = df_features.rolling(window_size).min().iloc[window_size:]
     if isnorm:
         rolled_min = rolled_min[::window_size]
     rolled_min.columns = [f'MIN_{column}' for column in list(rolled_min.columns)]
 
     # STD features
-    rolled_std = df_features.rolling(window_size).std()[window_size+1:]
+    rolled_std = df_features.rolling(window_size).std().iloc[window_size:]
     if isnorm:
         rolled_std = rolled_std[::window_size]
     rolled_std.columns = [f'STD_{column}' for column in list(rolled_std.columns)]
 
     # creating labels
-    rolled_labels = df_label.rolling(window_size).max()[window_size+1:]
+    rolled_labels = df_label.rolling(window_size).max().iloc [window_size:]
     if isnorm:
         rolled_labels = rolled_labels[::window_size]
     rolled = pd.concat([rolled_max, rolled_min, rolled_std, rolled_labels, rolled_pywt_df, rolled_prefixspan_df], axis=1)
@@ -380,7 +391,7 @@ def roll_dataset(df, features, label_col, prefixspan_col, window_size, isnorm):
     rolled = rolled.fillna(rolled.mean())
     rolled[label_col] = rolled[label_col].astype(np.int16)
 
-    return rolled
+    return rolled, TIRPS
 
 def minmax_normalizer(df, label_col, scaler=None):
     """
@@ -405,7 +416,7 @@ def minmax_normalizer(df, label_col, scaler=None):
 
     return df
 
-def create_TTA(test_df, label_col, window_size):
+def create_TTA(test_df, label_col, window_size, step=1):
     """
     Creating the synthetic samples which will be the TTA later in the test phase
 
@@ -416,6 +427,7 @@ def create_TTA(test_df, label_col, window_size):
     window_size: int. The size of the window.
     """
 
+    test_df = test_df.reset_index(drop=True)
     test_norm_df = test_df[window_size:-window_size:window_size]
 
     tta_labels = []
@@ -424,16 +436,19 @@ def create_TTA(test_df, label_col, window_size):
     # making the TTA data
     for index in tqdm(test_norm_df.index):
         index = int(index)
-        # take 4-before current index
-        before_tta_samples = test_df.iloc[index - (window_size-1): index]
-        # take 4-after current index
-        after_tta_samples = test_df.iloc[index + 1: index + window_size]
-        # concat 4-before and 4-after df
+        # take TTA windows before
+        before_tta_samples = test_df.iloc[index - (window_size-1) : index : step]
+        # take TTA windows after
+        after_tta_samples = test_df.iloc[index + 1 : index + window_size : step]
+        # concat before TTA windows and after TTA windows 
         current_tta = pd.concat([before_tta_samples, after_tta_samples], axis=0)
 
         tta_labels.append(current_tta[label_col].values)
         tta_features.append(current_tta.drop(columns=[label_col], axis=1).values)
     
+    # tta_features = np.array(tta_features)
+    # tta_labels = np.array(tta_labels)
+
     return tta_features, tta_labels
 
 def save_to_disk(train_features, train_labels, test_features, test_labels, tta_features, tta_labels, dataset_name, window_size):
@@ -465,6 +480,7 @@ if __name__ == '__main__':
     parser.add_argument('-d', "--dataset", required=True, dest='dataset_name', type=str, help='the dataset to preprocess and save to disk for later use')
     parser.add_argument('-n', '--nrows', dest='nrows', type=int, default=-1, help='The number of rows to read from the dataset')
     parser.add_argument('-w', '--windowsize', dest='window_size', type=int, default=5, help='The size of the window')
+    parser.add_argument('-s', '--ttastep', dest='tta_step', type=int, default=2, help='The stride of the TTA-created windows')
     parser.add_argument('-t', '--testratio', dest='test_ratio', type=float, default=0.3, help='The test ratio in the train-test split')
     args = parser.parse_args()
 
