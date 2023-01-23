@@ -26,14 +26,30 @@ def train(train_ds, validation_ds, features_dim, args):
     for x_batch_train, y_batch_train in train_ds:
         train_X.append(x_batch_train)
     train_X = np.concatenate(train_X, axis=0)
-    # train_X = train_X[np.random.choice(np.arange(len(train_X)), size=10000)]
 
-    if_estimator = if_training(train_X)
-    # lof_estiamtor = lof_training(train_X)
-    # ocs_estimator = ocs_training(train_X)
-    AE_estimator = train_estimator(train_ds, validation_ds, features_dim, args)
+    trained_models = {}
 
-    return if_estimator, AE_estimator
+    if args.isolation_forest:
+        print("Isolation Foreset Training")
+        if_estimator = if_training(train_X)
+        trained_models["if_estimator"] = if_estimator
+
+    if args.local_outlier_factor:
+        print("Local Outlier Factor Training")
+        lof_estimator = lof_training(train_X)
+        trained_models["lof_estimator"] = lof_estimator
+    
+    if args.one_class_svm:
+        print("One Class SVM Training")
+        ocs_estimator = ocs_training(train_X)
+        trained_models["ocs_estimator"] = ocs_estimator
+
+    if args.autoencoder:
+        print("Autoencoder Training")
+        AE_estimator = train_estimator(train_ds, validation_ds, features_dim, args)
+        trained_models["AE_estimator"] = AE_estimator
+
+    return trained_models
 
 def train_estimator(train_ds, validation_ds, features_dim, args):
     """
@@ -117,7 +133,7 @@ def if_training(train_X):
     """
     
     print("--- Training Isolation Forest ---")
-    if_clf = IsolationForest(max_samples=10000, n_jobs=-1).fit(train_X)
+    if_clf = IsolationForest(max_samples=0.94, n_jobs=-1).fit(train_X)
 
     return if_clf
 

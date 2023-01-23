@@ -10,15 +10,20 @@ evaluated_algorithms = [
     'Sliding_Window_TTA',
 ]
 
+AUTOENCODER = "Autoencoder"
+ISOLATION_FOREST = "Isolation Forest"
+LOCAL_OUTLIER_FACTOR = "Local Outlier Factor"
+ONE_CLASS_SVM = "One-Class SVM"
+
 evaluated_estimators = [
-    'Isolation Forest',
+    # 'Isolation Forest',
     # 'Local Outlier Factor',
     # 'One-Class SVM',
-    'Autoencoder'
+    # 'Autoencoder'
 ]
 
 
-def test(test_ds, if_estimator, AE_estimator, args):
+def test(test_ds, trained_models, args):
     """
     Performing test phase on the test set with all of the compared algorithms described in the Experiments section
 
@@ -33,12 +38,12 @@ def test(test_ds, if_estimator, AE_estimator, args):
     """
 
     # testing
-    algorithms_metrics = test_loop(test_ds, if_estimator, AE_estimator, args)
+    algorithms_metrics = test_loop(test_ds, **trained_models)
 
     # printing experiments results
     print_test_results(algorithms_metrics, args)
 
-def test_loop(test_ds, if_estimator, AE_estimator, args):
+def test_loop(test_ds, AE_estimator=None, if_estimator=None, lof_estimator=None, ocs_estimator=None):
     """
     The test loop implementation on every evaluated algorithm
 
@@ -51,9 +56,19 @@ def test_loop(test_ds, if_estimator, AE_estimator, args):
     AE_estimator: tuple of tensorflow's Dataset. The trained AE estimator. In that case, containing the trained encoder and decoder
     args: argparse args. The args to the program
     """
+    global evaluated_estimators
+    if AE_estimator is not None:
+        evaluated_estimators.append(AUTOENCODER)
+    if if_estimator is not None:
+        evaluated_estimators.append(ISOLATION_FOREST)
+    if lof_estimator is not None:
+        evaluated_estimators.append(LOCAL_OUTLIER_FACTOR)
+    if ocs_estimator is not None:
+        evaluated_estimators.append(ONE_CLASS_SVM)
 
     # extracting encoder & decoder
-    encoder, decoder = AE_estimator
+    if AE_estimator is not None:
+        encoder, decoder = AE_estimator
 
     # setting up training configurations
     loss_func = tf.keras.losses.MeanSquaredError(reduction=tf.keras.losses.Reduction.NONE)
@@ -68,19 +83,22 @@ def test_loop(test_ds, if_estimator, AE_estimator, args):
     for step, (x_batch_test, y_batch_test, tta_features_batch, tta_labels_batch) in tqdm(enumerate(test_ds), total=tqdm_total_bar):
         test_X.append(x_batch_test)
         tta_X.append(tta_features_batch)
-
-        # saving anomaly score on original test instace
-        AE_reconstruction_loss = test_step(x_batch_test, encoder, decoder, loss_func).numpy()
-
-
         # saving ground-truth
         test_labels.append(y_batch_test.numpy())
 
-        # saving baseline test loss
-        algorithms_test_loss['WO_TTA_Baseline']['Autoencoder'].append(AE_reconstruction_loss)
+        
+        if AE_estimator is not None:
+            # saving anomaly score on original test instace
+            AE_reconstruction_loss = test_step(x_batch_test, encoder, decoder, loss_func).numpy() # type: ignore
+            # saving baseline test loss
+            algorithms_test_loss['WO_TTA_Baseline']['Autoencoder'].append(AE_reconstruction_loss)
+            # saving TTA test loss
+            AE_tta_reconstructions = test_step(tta_features_batch, encoder, decoder, loss_func).numpy() # type: ignore
 
-        # saving TTA test loss
-        AE_tta_reconstructions = test_step(tta_features_batch, encoder, decoder, loss_func).numpy()
+            for original_loss, tta_loss in list(zip(AE_reconstruction_loss, AE_tta_reconstructions)):
+                aggregated_loss = np.concatenate([[original_loss], tta_loss], axis=0)
+                algorithms_test_loss['Sliding_Window_TTA']['Autoencoder'].append(np.mean(aggregated_loss))
+        
 
         # for original_loss, tta_loss in list(zip(if_anomaly_score, if_tta_anomaly_score)):
         #     aggregated_loss = np.concatenate([[original_loss], tta_loss], axis=0)
@@ -94,41 +112,48 @@ def test_loop(test_ds, if_estimator, AE_estimator, args):
         #     aggregated_loss = np.concatenate([[original_loss], tta_loss], axis=0)
         #     algorithms_test_loss['Sliding_Window_TTA']['One-Class SVM'].append(np.mean(aggregated_loss))
 
-        for original_loss, tta_loss in list(zip(AE_reconstruction_loss, AE_tta_reconstructions)):
-            aggregated_loss = np.concatenate([[original_loss], tta_loss], axis=0)
-            algorithms_test_loss['Sliding_Window_TTA']['Autoencoder'].append(np.mean(aggregated_loss))
 
     # flatten
     test_X = np.concatenate(test_X, axis=0)
     tta_X = np.concatenate(tta_X, axis=0)
 
-    
-    if_anomaly_score = if_test_step(test_X, if_estimator)
-    # lof_anomaly_score = lof_test_step(test_X, lof_estiamtor)
-    # ocs_anomaly_score = ocs_test_step(test_X, ocs_estimator)
-
-    algorithms_test_loss['WO_TTA_Baseline']['Isolation Forest'] = if_anomaly_score
-    # algorithms_test_loss['WO_TTA_Baseline']['Local Outlier Factor'] = lof_anomaly_score
-    # algorithms_test_loss['WO_TTA_Baseline']['One-Class SVM'] = ocs_anomaly_score
-
     num_samples, num_tta, num_features = tta_X.shape
-    if_tta_anomaly_score = if_test_step(tta_X.reshape(num_samples*num_tta, num_features), if_estimator).reshape(num_samples, num_tta)
-    # lof_tta_anomaly_score = lof_test_step(tta_X.reshape(num_samples*num_tta, num_features), lof_estiamtor).reshape(num_samples, num_tta)
-    # ocs_tta_anomaly_score = ocs_test_step(tta_X.reshape(num_samples*num_tta, num_features), ocs_estimator).reshape(num_samples, num_tta)
 
-    if_total_anomaly_score = np.concatenate([if_tta_anomaly_score, np.expand_dims(if_anomaly_score, axis=1)], axis=1)
-    # lof_total_anomaly_score = np.concatenate([lof_tta_anomaly_score, np.expand_dims(lof_anomaly_score, axis=1)], axis=1)
-    # ocs_total_anomaly_score = np.concatenate([ocs_tta_anomaly_score, np.expand_dims(ocs_anomaly_score, axis=1)], axis=1)
+    if if_estimator is not None:
 
-    algorithms_test_loss['Sliding_Window_TTA']['Isolation Forest'] = np.mean(if_total_anomaly_score, axis=1)
-    # algorithms_test_loss['Sliding_Window_TTA']['Local Outlier Factor'] = np.mean(lof_total_anomaly_score, axis=1)
-    # algorithms_test_loss['Sliding_Window_TTA']['One-Class SVM'] = np.mean(ocs_total_anomaly_score, axis=1)
+        if_anomaly_score = if_test_step(test_X, if_estimator)
+        algorithms_test_loss['WO_TTA_Baseline']['Isolation Forest'] = if_anomaly_score # type: ignore
+        if_tta_anomaly_score = if_test_step(tta_X.reshape(num_samples*num_tta, num_features), if_estimator).reshape(num_samples, num_tta)
+        if_total_anomaly_score = np.concatenate([if_tta_anomaly_score, np.expand_dims(if_anomaly_score, axis=1)], axis=1)
+        algorithms_test_loss['Sliding_Window_TTA']['Isolation Forest'] = np.mean(if_total_anomaly_score, axis=1)
+    
+
+
+    if lof_estimator is not None:
+
+        lof_anomaly_score = lof_test_step(test_X, lof_estimator)
+        algorithms_test_loss['WO_TTA_Baseline']['Local Outlier Factor'] = lof_anomaly_score # type: ignore
+        lof_tta_anomaly_score = lof_test_step(tta_X.reshape(num_samples*num_tta, num_features), lof_estimator).reshape(num_samples, num_tta)
+        lof_total_anomaly_score = np.concatenate([lof_tta_anomaly_score, np.expand_dims(lof_anomaly_score, axis=1)], axis=1)
+        algorithms_test_loss['Sliding_Window_TTA']['Local Outlier Factor'] = np.mean(lof_total_anomaly_score, axis=1)
+
+
+    if ocs_estimator is not None:
+
+        ocs_anomaly_score = ocs_test_step(test_X, ocs_estimator)
+        algorithms_test_loss['WO_TTA_Baseline']['One-Class SVM'] = ocs_anomaly_score # type: ignore
+        ocs_tta_anomaly_score = ocs_test_step(tta_X.reshape(num_samples*num_tta, num_features), ocs_estimator).reshape(num_samples, num_tta)
+        ocs_total_anomaly_score = np.concatenate([ocs_tta_anomaly_score, np.expand_dims(ocs_anomaly_score, axis=1)], axis=1)
+        algorithms_test_loss['Sliding_Window_TTA']['One-Class SVM'] = np.mean(ocs_total_anomaly_score, axis=1)
 
 
     # algorithms_test_loss['WO_TTA_Baseline']['Isolation Forest'] = np.concatenate(algorithms_test_loss['WO_TTA_Baseline']['Isolation Forest'], axis=0)
     # algorithms_test_loss['WO_TTA_Baseline']['Local Outlier Factor'] = np.concatenate(algorithms_test_loss['WO_TTA_Baseline']['Local Outlier Factor'], axis=0)
     # algorithms_test_loss['WO_TTA_Baseline']['One-Class SVM'] = np.concatenate(algorithms_test_loss['WO_TTA_Baseline']['One-Class SVM'], axis=0)
-    algorithms_test_loss['WO_TTA_Baseline']['Autoencoder'] = np.concatenate(algorithms_test_loss['WO_TTA_Baseline']['Autoencoder'], axis=0)
+
+    if AE_estimator is not None:
+        algorithms_test_loss['WO_TTA_Baseline']['Autoencoder'] = np.concatenate(algorithms_test_loss['WO_TTA_Baseline']['Autoencoder'], axis=0) # type: ignore
+
     test_labels = np.concatenate(test_labels, axis=0)
 
     y_true = np.asarray(test_labels).astype(int)
