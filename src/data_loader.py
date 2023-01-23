@@ -12,13 +12,13 @@ def load_dataset(args):
     """
 
     # loading preprocssed data
-    preproceseed_data, features_dim = load_preprocessed(args.dataset_name, args.window_size)
+    preproceseed_data, features_dim = load_preprocessed(args.dataset_name, args.window_size, args.static_temporal_features)
 
     datasets = make_dataset(preproceseed_data, args)
 
     return datasets, features_dim
 
-def load_preprocessed(dataset_name, window_size):
+def load_preprocessed(dataset_name, window_size, is_static_features):
     """
     Loading saved preprocessed dataset files (training set, test set, TTAs)
 
@@ -40,6 +40,13 @@ def load_preprocessed(dataset_name, window_size):
 
     # extracting TTAs features and labels
     tta_features, tta_labels = preprocessed_zip['tta_features'], preprocessed_zip['tta_labels']
+
+    if is_static_features:
+       print(f"Static Features Only!! - #Features Before: {train_features.shape[-1]}, #Features After: {train_features[:, :-15].shape[-1]}")
+       # removing the last features (the temporal aggregation features)
+       train_features = train_features[:, :-15]
+       test_features = test_features[:, :-15]
+       tta_features = tta_features[:, :, :-15]
 
     # getting the dimensionality of the dataset
     features_dim = train_features.shape[-1]

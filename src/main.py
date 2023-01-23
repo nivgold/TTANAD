@@ -46,7 +46,7 @@ def run_experiment(args):
     # training
     print("--- Start training ---")
     start_time = time.time()
-    if_estimator, AE_estimator = train(train_ds, validation_ds, features_dim, args)
+    trained_models = train(train_ds, validation_ds, features_dim, args)
     end_time = time.time()
     print("--- Training finished after: ", end='')
     get_execute_time(start_time, end_time)
@@ -54,7 +54,7 @@ def run_experiment(args):
     # testing
     print("--- Start testing ---")
     start_time = time.time()
-    test(test_ds, if_estimator, AE_estimator, args)
+    test(test_ds, trained_models, args)
     end_time = time.time()
     print("--- Testing finished after: ", end='')
     get_execute_time(start_time, end_time)
@@ -68,6 +68,11 @@ if __name__ == '__main__':
     parser.add_argument("-e", "--epochs", dest="num_epochs", default=300, type=int, help="The number of epochs to train with the anomaly detector model")
     parser.add_argument('-b', "--batch-size", dest="batch_size", default=32, type=int, help="The batch size used for training")
     parser.add_argument('-a', "--early-stopping-patience", dest="early_stopping_patience", default=5, type=int, help="The number of epochs for early stopping patience")
+    parser.add_argument('--ae', dest="autoencoder", action="store_true")
+    parser.add_argument('--if', dest="isolation_forest", action="store_true")
+    parser.add_argument('--lof', dest="local_outlier_factor", action="store_true")
+    parser.add_argument('--ocs', dest="one_class_svm", action="store_true")
+    parser.add_argument('--static', dest="static_temporal_features", action="store_true")
     args = parser.parse_args()
 
     # adding support for runnning all of the available datasets
