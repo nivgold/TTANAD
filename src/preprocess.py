@@ -155,8 +155,9 @@ def preprocessing(dataset_name, args):
 
     print(f"--- Openning {dataset_name} ---")
     
-    if args.nrows != -1:
-        df = pd.read_csv(data_file_path, nrows=args.nrows)
+    if args.skiprows != -1:
+        columns = pd.read_csv(data_file_path, nrows=1).columns.tolist()
+        df = pd.read_csv(data_file_path, skiprows=args.skiprows, header=None, names=columns)
     else:
         df = pd.read_csv(data_file_path)
 
@@ -182,6 +183,9 @@ def preprocessing(dataset_name, args):
 
     train_df = train_df.reset_index(drop=True)
     test_df = test_df.reset_index(drop=True)
+
+    print(f"Test  Anomalies: {test_df[DATASET_DATA_FILE[dataset_name]['label_col']].sum()}")
+    print(f"Train  Anomalies: {train_df[DATASET_DATA_FILE[dataset_name]['label_col']].sum()}")
 
     # rolling the dataset to obtain statistics every 5 'ticks'
     print(f'--- Rolling training set ---')
@@ -276,8 +280,8 @@ def train_test_split(df, test_ratio):
     train_ratio = 1 - test_ratio
     
     train_last_idx = int(len(df) * train_ratio)
-    train_df = df.iloc[:train_last_idx, :].reset_index(drop=True)
-    test_df = df.iloc[train_last_idx:, :].reset_index(drop=True)
+    train_df = df.iloc[train_last_idx:, :].reset_index(drop=True)
+    test_df = df.iloc[:train_last_idx, :].reset_index(drop=True)
     
     return train_df, test_df
 
@@ -481,6 +485,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('-d', "--dataset", required=True, dest='dataset_name', type=str, help='the dataset to preprocess and save to disk for later use')
     parser.add_argument('-n', '--nrows', dest='nrows', type=int, default=-1, help='The number of rows to read from the dataset')
+    parser.add_argument('-k', '--skiprows', dest='skiprows', type=int, default=-1, help='The number of rows to skip when uploading the dataset')
     parser.add_argument('-w', '--windowsize', dest='window_size', type=int, default=5, help='The size of the window')
     parser.add_argument('-s', '--ttastep', dest='tta_step', type=int, default=2, help='The stride of the TTA-created windows')
     parser.add_argument('-t', '--testratio', dest='test_ratio', type=float, default=0.3, help='The test ratio in the train-test split')
@@ -492,8 +497,8 @@ if __name__ == '__main__':
         raise ValueError("Provided dataset is not supported")
 
     # checking if the given dataset is IDS18 so we shouldn't load all the data
-    if dataset_name in 'ids18' and args.nrows == -1:
+    if dataset_name in 'ids18' and args.skiprows == -1:
         # if IDS18 was selected for preprocessing and nrows remained -1, the default number of rows to load is 3M.
-        args.nrows = 3000000
+        args.skiprows = 5000000
     print(f"--- Starting preprocess {dataset_name} dataset ---")
     preprocessing(dataset_name, args)
